@@ -1,31 +1,23 @@
 # PersonalResume
 
-PersonalResume 是一个基于 Markdown 的工程化简历模板项目，适合把个人简历当作代码长期维护。项目支持多版本简历、HTML 预览和 PDF 导出，拉取后只需要替换示例内容，就可以生成自己的简历。
+![PersonalResume 仓库封面](assets/demo/social-preview.png)
 
-## 功能
+PersonalResume 是一个基于 Markdown 的工程化简历模板项目，用代码维护多版本简历，并一键生成 HTML 预览和 A4 PDF。
 
-- 使用 Markdown 维护简历内容，降低排版和版本维护成本。
+## 预览
+
+![示例简历预览](assets/demo/resume-preview.png)
+
+示例内容使用虚拟信息，可直接作为公开模板参考。拉取仓库后复制示例版本，替换为自己的经历、项目和联系方式即可生成个人简历。
+
+## 功能亮点
+
+- 使用 Markdown 维护简历内容，降低排版、复制和版本维护成本。
 - 每个简历版本独立维护 `resume.md`、`index.html`、`resume.css`、`resume.pdf`。
-- 使用统一 CSS 模板渲染 A4 简历，兼顾浏览器预览和打印导出。
+- 使用统一 CSS 模板渲染 A4 简历，兼顾浏览器预览和 PDF 打印导出。
 - 构建时自动检查基础文件、HTML 结构、CSS 打印规则和 PDF 页数。
-- 在简历最后一页页脚生成来源水印，链接到本开源模板仓库。
-
-## 目录结构
-
-```text
-PersonalResume/
-├── assets/
-│   ├── fonts/              # 本地中文字体
-│   └── icons/              # 渲染用图标资源
-├── docs/
-│   └── guide/              # Markdown 简历编写和发布说明
-├── export/                 # 快捷 HTML 预览入口
-├── scripts/                # 构建与检查脚本
-├── styles/                 # 公共样式模板
-├── versions/               # 多版本简历目录
-├── resume.config.json      # 简历版本和构建配置
-└── package.json
-```
+- 自动规划项目条目分页，减少标题、技术栈、描述和列表项被割裂的情况。
+- 在简历最后一页页脚生成浅色来源水印，并把仓库名渲染为可点击链接。
 
 ## 快速开始
 
@@ -53,16 +45,6 @@ npm run check
 npm run build -- --version sample-java-backend
 ```
 
-构建链路：
-
-```text
-resume.md
-↓
-index.html
-↓
-resume.pdf
-```
-
 生成 PDF 需要本机存在 Chromium 内核浏览器。脚本会优先读取 `RESUME_CHROME_PATH`，也会尝试从常见安装路径中查找 Chrome 或 Edge。
 
 ```bash
@@ -78,6 +60,29 @@ RESUME_CHROME_PATH=/path/to/chrome npm run build
 
 建议版本目录使用稳定英文名，避免跨平台工具处理中文路径时出现兼容问题。
 
+## 配置
+
+常用配置集中在 `resume.config.json`：
+
+| 字段 | 说明 |
+| --- | --- |
+| `defaultVersion` | 默认构建的简历版本 |
+| `versions` | 多版本简历配置 |
+| `cssTemplate` | 公共样式模板路径 |
+| `watermark` | 页脚来源水印配置 |
+| `browserPaths` | Chrome 或 Edge 的候选路径 |
+| `pdf` | PDF 导出参数 |
+
+构建链路：
+
+```text
+resume.md
+↓
+index.html
+↓
+resume.pdf
+```
+
 ## 水印
 
 构建脚本会在简历最后一页页脚居中生成浅色水印：
@@ -86,7 +91,25 @@ RESUME_CHROME_PATH=/path/to/chrome npm run build
 本简历由 Richard2091/PersonalResume 生成
 ```
 
-其中 `Richard2091/PersonalResume` 会带 GitHub 图标，并链接到公开仓库。相关配置位于 `resume.config.json` 的 `watermark` 字段。
+其中 `Richard2091/PersonalResume` 会带 GitHub 图标，并链接到公开仓库。普通 HTML 预览中水印跟随正文底部，PDF 打印时水印会定位到最后一页页脚。
+
+## 目录结构
+
+```text
+PersonalResume/
+├── assets/
+│   ├── demo/              # README 和 GitHub 展示图片
+│   ├── fonts/             # 本地中文字体
+│   └── icons/             # 渲染用图标资源
+├── docs/
+│   └── guide/             # Markdown 简历编写和发布说明
+├── export/                # 快捷 HTML 预览入口
+├── scripts/               # 构建与检查脚本
+├── styles/                # 公共样式模板
+├── versions/              # 多版本简历目录
+├── resume.config.json     # 简历版本和构建配置
+└── package.json
+```
 
 ## 路线图
 
@@ -96,10 +119,13 @@ RESUME_CHROME_PATH=/path/to/chrome npm run build
 - 支持 GitHub Pages 或其他静态站点自动发布。
 - 支持导入导出不同投递场景的简历版本。
 
-## 维护原则
+## 开源边界
 
 - 根目录不放个人简历源文件，所有版本统一放在 `versions/` 下。
-- 每个版本目录只维护本版本的内容和产物，不覆盖其他版本。
 - `styles/` 存放公共样式模板，版本目录中的 `resume.css` 由构建脚本生成。
 - `export/` 只作为快捷预览入口，不作为多版本主线输出目录。
 - 公开仓库中不要提交真实个人隐私、投递材料、面试题库或内部项目证据。
+
+## 许可证
+
+[MIT](LICENSE)

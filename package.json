@@ -1,8 +1,28 @@
 {
   "name": "personal-resume",
   "version": "1.0.0",
+  "description": "基于 Markdown 的工程化简历模板，支持多版本维护、HTML 预览、PDF 导出和页脚来源水印。",
   "private": false,
   "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "resume",
+    "resume-template",
+    "resume-builder",
+    "markdown",
+    "pdf",
+    "html",
+    "puppeteer",
+    "chinese-resume"
+  ],
+  "homepage": "https://github.com/Richard2091/PersonalResume#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Richard2091/PersonalResume.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Richard2091/PersonalResume/issues"
+  },
   "scripts": {
     "build": "node scripts/build-resume.mjs build",
     "check": "node scripts/build-resume.mjs check"
