@@ -1,0 +1,15 @@
+{
+  "name": "personal-resume",
+  "version": "1.0.0",
+  "private": false,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-resume.mjs build",
+    "check": "node scripts/build-resume.mjs check"
+  },
+  "dependencies": {
+    "markdown-it": "^14.1.0",
+    "pdf-lib": "^1.17.1",
+    "puppeteer-core": "^23.11.1"
+  }
+}

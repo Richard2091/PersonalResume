@@ -1,0 +1,35 @@
+{
+  "defaultVersion": "sample-java-backend",
+  "versions": {
+    "sample-java-backend": {
+      "title": "张三 - Java 后端开发工程师简历",
+      "exportHtml": "export/sample-java-backend.html",
+      "minPdfPages": 1
+    }
+  },
+  "cssTemplate": "styles/resume-single-column.css",
+  "watermark": {
+    "text": "本简历由",
+    "repository": "Richard2091/PersonalResume",
+    "suffix": "生成",
+    "url": "https://github.com/Richard2091/PersonalResume"
+  },
+  "browserPaths": [
+    "C:/Program Files/Google/Chrome/Application/chrome.exe",
+    "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
+    "C:/Program Files/Microsoft/Edge/Application/msedge.exe",
+    "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
+    "D:/Application/CentBrowser/Application/chrome.exe"
+  ],
+  "pdf": {
+    "format": "A4",
+    "printBackground": true,
+    "preferCSSPageSize": true,
+    "margin": {
+      "top": "0mm",
+      "right": "0mm",
+      "bottom": "0mm",
+      "left": "0mm"
+    }
+  }
+}
