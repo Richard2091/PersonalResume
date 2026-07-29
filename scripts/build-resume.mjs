@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
+import { Globe2, Info, Mail, PhoneCall } from "lucide";
 import MarkdownIt from "markdown-it";
 import { PDFDocument } from "pdf-lib";
 import puppeteer from "puppeteer-core";
@@ -9,6 +10,7 @@ import puppeteer from "puppeteer-core";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 const configPath = path.join(projectRoot, "resume.config.json");
+const githubIconPath = path.join(projectRoot, "assets", "icons", "github.svg");
 
 /**
  * 执行简历构建或检查命令。
@@ -196,6 +198,7 @@ async function checkResume(context) {
   ensureFile(path.join(projectRoot, "assets", "fonts", "NotoSansSC-Regular.otf"), "常规中文字体不存在");
   ensureFile(path.join(projectRoot, "assets", "fonts", "NotoSansSC-Medium.otf"), "中等字重中文字体不存在");
   ensureFile(path.join(projectRoot, "assets", "fonts", "NotoSansSC-Bold.otf"), "粗体中文字体不存在");
+  ensureFile(githubIconPath, "GitHub 图标资源不存在");
   findBrowserPath(context.config);
 
   // 校验 HTML 产物
@@ -351,8 +354,8 @@ function renderWatermark(watermark) {
  * @return {string}
  */
 function renderGithubIcon() {
-  // 使用行内 SVG，避免打印导出时 CSS mask 兼容问题
-  return `<svg class="resume-watermark-icon" viewBox="0 0 1024 1024" aria-hidden="true" focusable="false"><path d="M498.894518 100.608396c-211.824383 0-409.482115 189.041494-409.482115 422.192601 0 186.567139 127.312594 344.783581 295.065226 400.602887 21.13025 3.916193 32.039717-9.17701 32.039717-20.307512 0-10.101055 1.176802-43.343157 1.019213-78.596056-117.448946 25.564235-141.394311-49.835012-141.394311-49.835012-19.225877-48.805566-46.503127-61.793368-46.503127-61.793368-38.293141-26.233478 3.13848-25.611308 3.13848-25.611308 42.361807 2.933819 64.779376 43.443441 64.779376 43.443441 37.669948 64.574714 98.842169 45.865607 122.912377 35.094286 3.815909-27.262924 14.764262-45.918819 26.823925-56.431244-93.796246-10.665921-192.323237-46.90017-192.323237-208.673623 0-46.071292 16.498766-83.747379 43.449581-113.332185-4.379751-10.665921-18.805298-53.544497 4.076852-111.732757 0 0 35.46063-11.336186 116.16265 43.296085 33.653471-9.330506 69.783343-14.022365 105.654318-14.174837 35.869952 0.153496 72.046896 4.844332 105.753579 14.174837 80.606853-54.631248 116.00813-43.296085 116.00813-43.296085 22.935362 58.18826 8.559956 101.120049 4.180206 111.732757 27.052123 29.584806 43.443441 67.260893 43.443441 113.332185 0 162.137751-98.798167 197.850114-192.799074 208.262254 15.151072 13.088086 28.65155 38.804794 28.65155 78.17957 0 56.484456-0.459464 101.94381-0.459464 115.854635 0 11.235902 7.573489 24.381293 29.014824 20.2543C825.753867 867.330798 933.822165 709.10924 933.822165 522.700713c0-233.155201-224.12657-422.192601-434.927647-422.192601z" /></svg>`;
+  // 读取品牌 SVG 并内联，避免打印导出时外部资源加载差异
+  return renderInlineSvgIcon(githubIconPath, "resume-watermark-icon");
 }
 
 /**
@@ -378,20 +381,206 @@ function normalizeProjectMetaMarkdown(markdown) {
  * @return {string}
  */
 function renderHeader(md, tokens, titleText) {
-  // 查找头部段落并设置样式类
+  // 查找头部段落，首段作为岗位摘要，后续段落作为联系信息条
   const prepared = cloneTokens(tokens);
+  const parts = [];
   let paragraphIndex = 0;
-  for (let index = 0; index < prepared.length; index += 1) {
-    if (prepared[index].type === "paragraph_open") {
-      prepared[index].attrSet("class", paragraphIndex === 0 ? "headline" : "contact-lines");
-      paragraphIndex += 1;
+  let index = 0;
+  while (index < prepared.length) {
+    if (prepared[index].type !== "paragraph_open") {
+      parts.push(renderTokenSlice(md, [prepared[index]]).trimEnd());
+      index += 1;
+      continue;
     }
+
+    const closeIndex = findParagraphClose(prepared, index + 1);
+    const paragraphTokens = prepared.slice(index, closeIndex + 1);
+    if (paragraphIndex === 0) {
+      paragraphTokens[0].attrSet("class", "headline");
+      parts.push(renderTokenSlice(md, paragraphTokens).trimEnd());
+    } else {
+      const inline = paragraphTokens.find((token) => token.type === "inline");
+      parts.push(renderContactBar(inline?.content || ""));
+    }
+    paragraphIndex += 1;
+    index = closeIndex + 1;
   }
 
   return `<header class="resume-header">
 <h1>${titleText}</h1>
-${renderTokenSlice(md, prepared)}
+${parts.filter(Boolean).join("\n")}
 </header>`;
+}
+
+/**
+ * 查找段落结束 token。
+ *
+ * @param {Array<any>} tokens token 列表
+ * @param {number} startIndex 起始索引
+ * @return {number}
+ */
+function findParagraphClose(tokens, startIndex) {
+  // 从当前位置向后查找段落关闭标记
+  const closeIndex = tokens.findIndex((token, index) => index >= startIndex && token.type === "paragraph_close");
+  return closeIndex >= 0 ? closeIndex : tokens.length - 1;
+}
+
+/**
+ * 渲染头部联系信息条。
+ *
+ * @param {string} content 联系信息原始文本
+ * @return {string}
+ */
+function renderContactBar(content) {
+  // 解析每一行联系信息，并渲染为可点击条目
+  const items = content
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map(parseContactItem);
+
+  if (items.length === 0) {
+    return "";
+  }
+
+  return `<div class="contact-bar" aria-label="联系方式">
+${items.map(renderContactItem).join("\n")}
+</div>`;
+}
+
+/**
+ * 解析单条联系信息。
+ *
+ * @param {string} line 联系信息文本
+ * @return {{label: string, value: string, type: string, href: string | undefined}}
+ */
+function parseContactItem(line) {
+  // 拆分标签和值，并根据标签或内容推断链接类型
+  const match = line.match(/^([^：:]+)[：:]\s*(.+)$/);
+  const label = (match?.[1] || "").trim();
+  const value = (match?.[2] || line).trim();
+  const labelText = label || "信息";
+  const lowerLabel = labelText.toLowerCase();
+  const lowerValue = value.toLowerCase();
+
+  if (/电话|手机|tel|phone/.test(lowerLabel)) {
+    return { label: labelText, value, type: "phone", href: `tel:${value.replace(/[^\d+]/g, "")}` };
+  }
+  if (/邮箱|邮件|email|mail/.test(lowerLabel) || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+    return { label: labelText, value, type: "mail", href: `mailto:${value}` };
+  }
+  if (/github/.test(lowerLabel) || lowerValue.includes("github.com")) {
+    return { label: "GitHub", value, type: "github", href: normalizeUrl(value, "https://github.com/") };
+  }
+  if (/主页|网站|博客|blog|site|url/.test(lowerLabel) || /^[\w.-]+\.[a-z]{2,}/i.test(value)) {
+    return { label: labelText, value, type: "site", href: normalizeUrl(value, "https://") };
+  }
+
+  return { label: labelText, value, type: "text", href: undefined };
+}
+
+/**
+ * 渲染单个联系信息条目。
+ *
+ * @param {{label: string, value: string, type: string, href: string | undefined}} item 联系信息
+ * @return {string}
+ */
+function renderContactItem(item) {
+  // 输出链接或普通文本条目
+  const className = `contact-item contact-${item.type}`;
+  const content = `${renderContactIcon(item.type)}<span class="contact-label">${escapeHtml(item.label)}</span><span class="contact-value">${escapeHtml(item.value)}</span>`;
+  if (!item.href) {
+    return `<span class="${className}">${content}</span>`;
+  }
+
+  return `<a class="${className}" href="${escapeAttribute(item.href)}">${content}</a>`;
+}
+
+/**
+ * 规范化链接地址。
+ *
+ * @param {string} value 原始地址
+ * @param {string} defaultPrefix 默认前缀
+ * @return {string}
+ */
+function normalizeUrl(value, defaultPrefix) {
+  // 为无协议地址补充可点击链接前缀
+  if (/^https?:\/\//i.test(value)) {
+    return value;
+  }
+  if (value.toLowerCase().startsWith("github.com/")) {
+    return `https://${value}`;
+  }
+  if (defaultPrefix.endsWith("github.com/") && !value.toLowerCase().includes("github.com")) {
+    return `${defaultPrefix}${value.replace(/^@/, "")}`;
+  }
+  return `${defaultPrefix}${value}`;
+}
+
+/**
+ * 渲染联系信息图标。
+ *
+ * @param {string} type 联系信息类型
+ * @return {string}
+ */
+function renderContactIcon(type) {
+  // lucide 不包含品牌 GitHub 图标，因此复用项目内品牌 SVG
+  if (type === "github") {
+    return renderInlineSvgIcon(githubIconPath, "contact-icon contact-brand-icon");
+  }
+
+  // 从 lucide 图标节点生成行内 SVG，保证 HTML 预览和 PDF 导出一致
+  const icons = {
+    phone: PhoneCall,
+    mail: Mail,
+    site: Globe2,
+    text: Info
+  };
+  return `<svg class="contact-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${renderLucideNodes(icons[type] || icons.text)}</svg>`;
+}
+
+/**
+ * 读取并渲染可复用的行内 SVG 图标。
+ *
+ * @param {string} filePath SVG 文件路径
+ * @param {string} className 输出 SVG 类名
+ * @return {string}
+ */
+function renderInlineSvgIcon(filePath, className) {
+  // 读取 SVG 文件内容，去掉 XML 声明以便嵌入 HTML
+  const svg = readUtf8Text(filePath)
+    .replace(/^\s*<\?xml[^>]*>\s*/i, "")
+    .trim();
+
+  // 替换根 SVG 属性，交由调用方样式控制尺寸和语义
+  return svg.replace(/<svg\b[^>]*>/i, (tag) => {
+    const viewBox = tag.match(/\sviewBox=("[^"]*"|'[^']*')/i)?.[1] || '"0 0 24 24"';
+    return `<svg class="${escapeAttribute(className)}" viewBox=${viewBox} aria-hidden="true" focusable="false">`;
+  });
+}
+
+/**
+ * 渲染 lucide 图标节点。
+ *
+ * @param {Array<[string, Record<string, string | number>]>} nodes lucide 图标节点
+ * @return {string}
+ */
+function renderLucideNodes(nodes) {
+  // 将 lucide 的节点数组转换为 SVG 子元素
+  return nodes.map(([tag, attrs]) => `<${tag}${renderSvgAttributes(attrs)} />`).join("");
+}
+
+/**
+ * 渲染 SVG 属性。
+ *
+ * @param {Record<string, string | number>} attrs 属性集合
+ * @return {string}
+ */
+function renderSvgAttributes(attrs) {
+  // 转义并拼接 SVG 属性
+  return Object.entries(attrs)
+    .map(([name, value]) => ` ${name}="${escapeAttribute(String(value))}"`)
+    .join("");
 }
 
 /**

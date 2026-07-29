@@ -83,6 +83,11 @@ index.html
 resume.pdf
 ```
 
+## 项目文档
+
+- [Markdown 简历工程化手册](docs/guide/MD简历渲染手册.md)
+- [项目维护说明](docs/项目维护说明.md)
+
 ## 水印
 
 构建脚本会在简历最后一页页脚居中生成浅色水印：
@@ -102,7 +107,8 @@ PersonalResume/
 │   ├── fonts/             # 本地中文字体
 │   └── icons/             # 渲染用图标资源
 ├── docs/
-│   └── guide/             # Markdown 简历编写和发布说明
+│   ├── guide/             # Markdown 简历编写和发布说明
+│   └── 项目维护说明.md    # README、渲染手册和展示图片维护说明
 ├── export/                # 快捷 HTML 预览入口
 ├── scripts/               # 构建与检查脚本
 ├── styles/                # 公共样式模板

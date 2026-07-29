@@ -4,6 +4,7 @@
 
 电话：13800000000
 邮箱：zhangsan@example.com
+GitHub：github.com/demo
 个人主页：example.com/resume
 
 ## 个人优势
@@ -33,7 +34,6 @@
 ## 项目经历
 
 ### 企业任务协作平台｜Java 后端开发
-
 
 **2025.03 - 2025.09**
 **技术栈**：Spring Boot、MyBatis Plus、MySQL、Redis、Docker
