@@ -135,29 +135,29 @@ async function buildResume(context) {
     title: context.versionConfig.title,
     cssHref: "resume.css",
     watermark: context.config.watermark,
-    watermarkTopPx: 0,
+    watermarkSpacerPx: 0,
     pageBreakBlocks: new Set()
   });
   fs.writeFileSync(context.htmlPath, html, "utf8");
 
-  // 根据打印布局优化分页，再重新写入 HTML
-  const pageBreakBlocks = await planPageBreaks(context.htmlPath, browserPath);
+  // 使用浏览器打印引擎处理分页，避免预估分页与最终 PDF 分页不一致
+  const pageBreakBlocks = new Set();
   html = renderResumeHtml(markdown, {
     title: context.versionConfig.title,
     cssHref: "resume.css",
     watermark: context.config.watermark,
-    watermarkTopPx: 0,
+    watermarkSpacerPx: 0,
     pageBreakBlocks
   });
   fs.writeFileSync(context.htmlPath, html, "utf8");
 
-  // 测量最后一页坐标，将水印定位到页脚位置
-  const watermarkTopPx = await planWatermarkPosition(context.htmlPath, browserPath);
+  // 测量最后一页剩余空间，将水印作为最后内容推到页脚位置
+  const watermarkSpacerPx = await planWatermarkSpacer(context.htmlPath, browserPath);
   html = renderResumeHtml(markdown, {
     title: context.versionConfig.title,
     cssHref: "resume.css",
     watermark: context.config.watermark,
-    watermarkTopPx,
+    watermarkSpacerPx,
     pageBreakBlocks
   });
   fs.writeFileSync(context.htmlPath, html, "utf8");
@@ -168,7 +168,7 @@ async function buildResume(context) {
       title: context.versionConfig.title,
       cssHref: "../styles/resume-single-column.css",
       watermark: context.config.watermark,
-      watermarkTopPx,
+      watermarkSpacerPx,
       pageBreakBlocks
     });
     fs.writeFileSync(context.exportHtmlPath, exportHtml, "utf8");
@@ -282,7 +282,7 @@ function writeVersionCss(context) {
  * 将 Markdown 简历渲染为项目约定的 HTML。
  *
  * @param {string} markdown Markdown 文本
- * @param {{title: string, cssHref: string, watermark?: Record<string, string>, watermarkTopPx?: number, pageBreakBlocks: Set<string>}} options 渲染选项
+ * @param {{title: string, cssHref: string, watermark?: Record<string, string>, watermarkSpacerPx?: number, pageBreakBlocks: Set<string>}} options 渲染选项
  * @return {string}
  */
 function renderResumeHtml(markdown, options) {
@@ -307,9 +307,9 @@ function renderResumeHtml(markdown, options) {
 
   // 生成主体模块
   const bodyHtml = renderSections(md, tokens, firstSectionIndex, options.pageBreakBlocks);
-  const watermarkTopPx = Math.max(0, Math.round(options.watermarkTopPx || 0));
+  const watermarkSpacerPx = Math.max(0, Math.round(options.watermarkSpacerPx || 0));
   const resumeStyle = options.watermark
-    ? ` style="--resume-watermark-top: ${watermarkTopPx}px;"`
+    ? ` style="--resume-watermark-spacer: ${watermarkSpacerPx}px;"`
     : "";
   const watermarkHtml = renderWatermark(options.watermark);
 
@@ -686,70 +686,14 @@ function renderContentTokens(md, tokens) {
 }
 
 /**
- * 规划打印分页，尽量避免短项目块跨页。
- *
- * @param {string} htmlPath HTML 文件路径
- * @param {string} browserPath 浏览器路径
- * @return {Promise<Set<string>>}
- */
-async function planPageBreaks(htmlPath, browserPath) {
-  // 使用浏览器打印媒体估算分页边界
-  const pageBreakBlocks = new Set();
-  let browser;
-  try {
-    browser = await puppeteer.launch({
-      executablePath: browserPath,
-      headless: true,
-      args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
-    });
-    const page = await browser.newPage();
-    await page.emulateMediaType("print");
-    await page.goto(pathToFileURL(htmlPath).href, { waitUntil: "networkidle0" });
-    await page.evaluate(() => document.fonts.ready);
-
-    const candidates = await page.evaluate(() => {
-      const mmToPx = 96 / 25.4;
-      const pageContentHeight = (297 - 12 - 4) * mmToPx;
-      const resumeTop = document.querySelector(".resume")?.getBoundingClientRect().top ?? 0;
-      return Array.from(document.querySelectorAll(".entry-block"))
-        .map((element) => {
-          const rect = element.getBoundingClientRect();
-          const top = rect.top - resumeTop;
-          const bottom = rect.bottom - resumeTop;
-          const startPage = Math.floor(top / pageContentHeight);
-          const endPage = Math.floor((bottom - 1) / pageContentHeight);
-          return {
-            id: element.getAttribute("data-pdf-block"),
-            height: rect.height,
-            crossesPage: startPage !== endPage,
-            canFitOnePage: rect.height < pageContentHeight * 0.82
-          };
-        })
-        .filter((item) => item.id && item.crossesPage && item.canFitOnePage)
-        .map((item) => item.id);
-    });
-
-    for (const id of candidates) {
-      pageBreakBlocks.add(id);
-    }
-  } finally {
-    if (browser) {
-      await browser.close();
-    }
-  }
-
-  return pageBreakBlocks;
-}
-
-/**
- * 计算水印前置空白高度，让水印尽量位于最后一页页脚。
+ * 计算水印前置空白高度，让水印作为最后内容位于最后一页页脚。
  *
  * @param {string} htmlPath HTML 文件路径
  * @param {string} browserPath 浏览器路径
  * @return {Promise<number>}
  */
-async function planWatermarkPosition(htmlPath, browserPath) {
-  // 使用打印媒体测量正文高度和页面底部坐标
+async function planWatermarkSpacer(htmlPath, browserPath) {
+  // 使用打印媒体测量正文高度和页脚剩余空间
   let browser;
   try {
     browser = await puppeteer.launch({
@@ -772,16 +716,23 @@ async function planWatermarkPosition(htmlPath, browserPath) {
       const mmToPx = 96 / 25.4;
       const pageContentHeight = (297 - 12 - 4) * mmToPx;
       const watermarkRect = watermark.getBoundingClientRect();
+      const resumeTop = resume.getBoundingClientRect().top;
       const contentBottom = Array.from(resume.children)
         .filter((element) => element !== watermark)
         .reduce((bottom, element) => {
           const rect = element.getBoundingClientRect();
-          return Math.max(bottom, rect.bottom - resume.getBoundingClientRect().top);
+          return Math.max(bottom, rect.bottom - resumeTop);
         }, 0);
       const watermarkHeight = watermarkRect.height;
-      const pageIndex = Math.max(0, Math.ceil(contentBottom / pageContentHeight) - 1);
+      const pageIndex = Math.max(0, Math.floor(contentBottom / pageContentHeight));
       const targetTop = (pageIndex + 1) * pageContentHeight - 2 * mmToPx - watermarkHeight;
-      return Math.max(0, Math.floor(targetTop));
+      if (targetTop >= contentBottom) {
+        // 限制额外空白，避免浏览器分页时把水印单独挤到下一页。
+        return Math.max(0, Math.min(140, Math.floor(targetTop - contentBottom)));
+      }
+
+      // 当前页剩余空间不足时紧跟正文输出，避免生成只有水印的额外页面。
+      return 18;
     });
   } finally {
     if (browser) {
