@@ -152,7 +152,7 @@ async function buildResume(context) {
   fs.writeFileSync(context.htmlPath, html, "utf8");
 
   // 测量最后一页剩余空间，将水印作为最后内容推到页脚位置
-  const watermarkSpacerPx = await planWatermarkSpacer(context.htmlPath, browserPath);
+  const watermarkSpacerPx = await planWatermarkSpacer(context.htmlPath, browserPath, context.config.pdf);
   html = renderResumeHtml(markdown, {
     title: context.versionConfig.title,
     cssHref: "resume.css",
@@ -690,9 +690,46 @@ function renderContentTokens(md, tokens) {
  *
  * @param {string} htmlPath HTML 文件路径
  * @param {string} browserPath 浏览器路径
+ * @param {Record<string, any>} pdfOptions PDF 参数
  * @return {Promise<number>}
  */
-async function planWatermarkSpacer(htmlPath, browserPath) {
+async function planWatermarkSpacer(htmlPath, browserPath, pdfOptions) {
+  // 先使用打印媒体测量候选空白，再用真实 PDF 页数校验回退
+  const candidateSpacerPx = await measureWatermarkSpacer(htmlPath, browserPath);
+  if (candidateSpacerPx <= 0) {
+    return 0;
+  }
+
+  const html = readUtf8Text(htmlPath);
+  const baselinePages = await renderSpacerPdfPageCount(htmlPath, html, 0, browserPath, pdfOptions);
+  let left = 0;
+  let right = candidateSpacerPx;
+  let safeSpacerPx = 0;
+
+  while (left <= right) {
+    // 二分查找不会新增 PDF 页的最大水印空白
+    const middle = Math.floor((left + right) / 2);
+    const pageCount = await renderSpacerPdfPageCount(htmlPath, html, middle, browserPath, pdfOptions);
+    if (pageCount <= baselinePages) {
+      safeSpacerPx = middle;
+      left = middle + 1;
+    } else {
+      right = middle - 1;
+    }
+  }
+
+  // 给真实分页临界点留出余量，避免字体或浏览器版本差异导致水印被挤到独立页
+  return Math.max(0, safeSpacerPx - 8);
+}
+
+/**
+ * 测量理论水印前置空白高度。
+ *
+ * @param {string} htmlPath HTML 文件路径
+ * @param {string} browserPath 浏览器路径
+ * @return {Promise<number>}
+ */
+async function measureWatermarkSpacer(htmlPath, browserPath) {
   // 使用打印媒体测量正文高度和页脚剩余空间
   let browser;
   try {
@@ -739,6 +776,70 @@ async function planWatermarkSpacer(htmlPath, browserPath) {
       await browser.close();
     }
   }
+}
+
+/**
+ * 按指定水印空白导出临时 PDF 并返回真实页数。
+ *
+ * @param {string} htmlPath 原始 HTML 文件路径
+ * @param {string} html 原始 HTML 内容
+ * @param {number} spacerPx 水印前置空白像素
+ * @param {string} browserPath 浏览器路径
+ * @param {Record<string, any>} pdfOptions PDF 参数
+ * @return {Promise<number>}
+ */
+async function renderSpacerPdfPageCount(htmlPath, html, spacerPx, browserPath, pdfOptions) {
+  // 写入同目录临时 HTML，确保相对 CSS、字体和图标路径与正式构建一致
+  const tempHtmlPath = path.join(path.dirname(htmlPath), ".watermark-spacer-check.html");
+  const tempPdfPath = path.join(path.dirname(htmlPath), ".watermark-spacer-check.pdf");
+  const checkedHtml = replaceWatermarkSpacer(html, spacerPx);
+  fs.writeFileSync(tempHtmlPath, checkedHtml, "utf8");
+
+  let browser;
+  try {
+    // 使用真实浏览器导出 PDF 缓冲区，以最终打印结果作为分页事实
+    browser = await puppeteer.launch({
+      executablePath: browserPath,
+      headless: true,
+      args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
+    });
+    const page = await browser.newPage();
+    await page.emulateMediaType("print");
+    await page.goto(pathToFileURL(tempHtmlPath).href, { waitUntil: "networkidle0" });
+    await page.evaluate(() => document.fonts.ready);
+    const pdf = await page.pdf({
+      ...pdfOptions,
+      path: tempPdfPath
+    });
+    return await readPdfPageCount(Buffer.from(pdf));
+  } finally {
+    // 清理分页验证产生的临时文件
+    if (browser) {
+      await browser.close();
+    }
+    if (fs.existsSync(tempHtmlPath)) {
+      fs.rmSync(tempHtmlPath, { force: true });
+    }
+    if (fs.existsSync(tempPdfPath)) {
+      fs.rmSync(tempPdfPath, { force: true });
+    }
+  }
+}
+
+/**
+ * 替换 HTML 中的水印前置空白变量。
+ *
+ * @param {string} html HTML 内容
+ * @param {number} spacerPx 水印前置空白像素
+ * @return {string}
+ */
+function replaceWatermarkSpacer(html, spacerPx) {
+  // 更新根容器上的水印空白变量
+  const normalizedSpacerPx = Math.max(0, Math.round(spacerPx));
+  return html.replace(
+    /--resume-watermark-spacer:\s*\d+px;/,
+    `--resume-watermark-spacer: ${normalizedSpacerPx}px;`
+  );
 }
 
 /**
